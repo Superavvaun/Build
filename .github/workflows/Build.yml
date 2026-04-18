@@ -1,0 +1,127 @@
+# Build APK for Kiwi Browser (ARM64 Only)
+name: build
+
+on:
+  workflow_dispatch:
+    inputs:
+      prepareRelease:
+        description: 'Create a draft release in Google Play Store'     
+        required: true
+        default: 'no'
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [arm64] # Diubah dari [arm, arm64, x86, x64] ke arm64 saja
+
+    steps:
+      - name: Initializing build
+        run: echo Initializing build for platform ${{ matrix.platform }}
+
+      - name: Reclaiming disk space
+        run: |
+          sudo swapoff -av
+          sudo rm -f /swapfile
+          sudo rm -rf /usr/share/dotnet /imagegeneration
+
+      - name: Checking-out source-code
+        uses: actions/checkout@v2
+
+      - name: Creating secondary disk folder
+        run: |
+          sudo mkdir -p /extended_data
+          sudo chown -R runner:docker /extended_data
+      
+      - name: Link SSD
+        run: |
+          sudo ln -s /extended_data /mnt/secondary_disk
+          sudo ln -s /mnt/secondary_disk $GITHUB_WORKSPACE/
+
+      - name: Checking-out CIPD dependencies
+        uses: actions/checkout@v2
+        with:
+          repository: kiwibrowser/dependencies
+          path: ./secondary_disk/.cipd 
+
+      - name: Linking .cipd and copying .gclient
+        run: |
+          ln -s $GITHUB_WORKSPACE/./secondary_disk/.cipd ..
+          cp ../.cipd/.gclient ..
+          cp ../.cipd/.gclient_entries ..
+
+      - name: Installing system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python openjdk-8-jdk-headless libncurses5 ccache ninja-build
+          sudo bash install-build-deps.sh --no-chromeos-fonts
+
+      - name: Creating output folder
+        run: mkdir -p secondary_disk/out/android_${{ matrix.platform }}
+
+      - name: Generating APK signature key
+        run: keytool -genkey -v -keystore keystore.jks -alias dev -keyalg RSA -keysize 2048 -validity 10000 -storepass public_password -keypass public_password -dname "cn=Kiwi Browser (unverified), ou=Actions, o=Kiwi Browser, c=GitHub"
+
+      - name: Copying args.gn to target folder
+        run: |
+          cat .build/android_arm/args.gn | sed "s#target_cpu = \"arm\"#target_cpu = \"${{ matrix.platform }}\"#" | sed "s#android_default_version_name = \"Git\"#android_default_version_name = \"Git$(date '+%y%m%d')Gen${{ github.run_id }}\"#" > secondary_disk/out/android_${{ matrix.platform }}/args.gn
+
+      - name: Modifying args.gn (arm64 versioning)
+        run: sed -i "s#android_default_version_code = \"1\"#android_default_version_code = \"$(date '+%y%m%d')2\"#" secondary_disk/out/android_${{ matrix.platform }}/args.gn
+
+      - name: Downloading depot_tools
+        working-directory: ./secondary_disk
+        run: git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+
+      - name: Adding depot_tools to path
+        run: echo "$GITHUB_WORKSPACE/secondary_disk/depot_tools" >> $GITHUB_PATH
+
+      - name: Running gclient runhooks
+        run: gclient runhooks
+
+      - name: Generating build files
+        run: gn gen ./secondary_disk/out/android_${{ matrix.platform }}
+
+      - name: Compiling source-code (Final Stage Only)
+        run: ninja -C ./secondary_disk/out/android_${{ matrix.platform }} chrome_public_apk
+
+      - name: Uploading APK Artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: apk-arm64
+          path: ./secondary_disk/out/android_arm64/apks/
+
+  sign_and_upload:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Creating release
+        id: create_release
+        uses: actions/create-release@v1.1.4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Menggunakan token bawaan jika PAT tidak ada
+        with:
+          tag_name: ${{ github.run_id }}
+          release_name: Aesthetic Browser v1.0.0-${{ github.run_id }}
+          draft: false
+          prerelease: false
+          body: "Custom build for ARM64 only. Features: Modern UI, Capsule Omnibox, and Premium Colors."
+
+      - name: Downloading artifact (arm64)
+        uses: actions/download-artifact@v2
+        with:
+          name: apk-arm64
+          path: ./apk-arm64
+
+      - name: Uploading APK to Release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./apk-arm64/ChromePublic.apk
+          asset_name: Aesthetic-Browser-arm64.apk
+          asset_content_type: application/vnd.android.package-archive
