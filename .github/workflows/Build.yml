@@ -69,15 +69,23 @@ jobs:
 
       - name: Compiling source-code
         run: |
-          # 1. Masuk ke PATH
-          export PATH="$PATH:$GITHUB_WORKSPACE/secondary_disk/depot_tools"
-          export DEPOT_TOOLS_UPDATE=0
+          # Masuk ke folder depot_tools
+          cd $GITHUB_WORKSPACE/secondary_disk/depot_tools
           
-          # 2. Pancing depot_tools agar download python internal dll
-          # Kita pakai gclient --version cuma buat memicu bootstrap
-          gclient --version 
+          # Paksa depot_tools untuk update dirinya sendiri dan download python internal
+          ./update_depot_tools
           
-          # 3. Baru jalankan perintah build asli
+          # Tambahkan ke PATH secara eksplisit untuk session ini
+          export PATH="$GITHUB_WORKSPACE/secondary_disk/depot_tools:$PATH"
+          export VPYTHON_BYPASS="manually managed inventory"
+          
+          # Kembali ke root folder source code
+          cd $GITHUB_WORKSPACE
+          
+          # Inisialisasi gclient untuk memastikan semua tool siap
+          gclient --version
+          
+          # Jalankan build
           gn gen ./secondary_disk/out/android_${{ matrix.platform }}
           ninja -C ./secondary_disk/out/android_${{ matrix.platform }} chrome_public_apk
 
