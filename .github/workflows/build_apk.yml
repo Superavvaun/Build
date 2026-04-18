@@ -128,16 +128,13 @@ jobs:
         run: git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
 
       - name: Adding depot_tools to path
-        env:
-          ACTIONS_ALLOW_UNSECURE_COMMANDS: true
-        run: echo "::add-path::$GITHUB_WORKSPACE/secondary_disk/depot_tools"
+        run: echo "$GITHUB_WORKSPACE/secondary_disk/depot_tools" >> $GITHUB_PATH
 
       - name: Setting environment variables
-        env:
-          ACTIONS_ALLOW_UNSECURE_COMMANDS: true
         run: |
-          echo "::set-env name=CC::ccache clang -Qunused-arguments"
-          echo "::set-env name=CXX::ccache clang++ -Qunused-arguments"
+          echo "CC=ccache clang -Qunused-arguments" >> $GITHUB_ENV
+          echo "CXX=ccache clang++ -Qunused-arguments" >> $GITHUB_ENV
+    
 
       - name: Checking available disk-space
         run: df -h
