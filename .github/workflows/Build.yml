@@ -69,8 +69,15 @@ jobs:
 
       - name: Compiling source-code
         run: |
+          # 1. Masuk ke PATH
           export PATH="$PATH:$GITHUB_WORKSPACE/secondary_disk/depot_tools"
-          # Baris di bawah ini adalah perintah rakit yang asli
+          export DEPOT_TOOLS_UPDATE=0
+          
+          # 2. Pancing depot_tools agar download python internal dll
+          # Kita pakai gclient --version cuma buat memicu bootstrap
+          gclient --version 
+          
+          # 3. Baru jalankan perintah build asli
           gn gen ./secondary_disk/out/android_${{ matrix.platform }}
           ninja -C ./secondary_disk/out/android_${{ matrix.platform }} chrome_public_apk
 
