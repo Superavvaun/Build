@@ -56,9 +56,10 @@ jobs:
       - name: Installing system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y python openjdk-8-jdk-headless libncurses5 ccache ninja-build
+          sudo apt-get install -y python3 python-is-python3 openjdk-11-jdk-headless libncurses6 ccache ninja-build
+          sudo ln -s /usr/lib/x86_64-linux-gnu/libncursesw.so.6 /usr/lib/x86_64-linux-gnu/libncurses.so.5
           sudo bash install-build-deps.sh --no-chromeos-fonts
-
+          
       - name: Generating build files
         run: |
           mkdir -p secondary_disk/out/android_${{ matrix.platform }}
