@@ -73,18 +73,20 @@ jobs:
           export PATH="$GITHUB_WORKSPACE/secondary_disk/depot_tools:$PATH"
           export VPYTHON_BYPASS="manually managed inventory"
           
-          # 2. Sinkronisasi dependency yang hilang (PENTING)
-          # Ini akan mendownload semua third_party yang kurang
+          # 2. Inisialisasi ulang gclient di root folder
+          # Kita beri tahu gclient bahwa source code ada di sini
+          gclient config --unmanaged https://github.com/kiwibrowser/src.git
+          
+          # 3. Sinkronisasi (Shallow agar hemat space disk)
           gclient sync --force --nohooks --no-history --shallow
           
-          # 3. Jalankan hooks untuk setup toolchain Android
+          # 4. Jalankan hooks untuk setup toolchain
           gclient runhooks
           
-          # 4. Generate build files
+          # 5. Generate build files
           gn gen ./secondary_disk/out/android_${{ matrix.platform }}
           
-          # 5. Build dengan pembatasan job (biar RAM/Disk gak meledak)
-          # Kita pakai -j 2 supaya gak terlalu rakus resource
+          # 6. Build (Pakai -j 2 biar aman dari crash RAM)
           ninja -j 2 -C ./secondary_disk/out/android_${{ matrix.platform }} chrome_public_apk
 
       - name: Uploading APK Artifact
