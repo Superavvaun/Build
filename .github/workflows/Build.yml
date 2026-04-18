@@ -70,9 +70,9 @@ jobs:
       - name: Compiling source-code
         run: |
           export PATH="$PATH:$GITHUB_WORKSPACE/secondary_disk/depot_tools"
-          # These steps might take 1-2 hours
-          # gn gen ./secondary_disk/out/android_${{ matrix.platform }}
-          # ninja -C ./secondary_disk/out/android_${{ matrix.platform }} chrome_public_apk
+          # Baris di bawah ini adalah perintah rakit yang asli
+          gn gen ./secondary_disk/out/android_${{ matrix.platform }}
+          ninja -C ./secondary_disk/out/android_${{ matrix.platform }} chrome_public_apk
 
       - name: Uploading APK Artifact
         uses: actions/upload-artifact@v4
