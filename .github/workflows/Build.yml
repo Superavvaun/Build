@@ -69,25 +69,23 @@ jobs:
 
       - name: Compiling source-code
         run: |
-          # Masuk ke folder depot_tools
-          cd $GITHUB_WORKSPACE/secondary_disk/depot_tools
-          
-          # Paksa depot_tools untuk update dirinya sendiri dan download python internal
-          ./update_depot_tools
-          
-          # Tambahkan ke PATH secara eksplisit untuk session ini
+          # 1. Setup PATH
           export PATH="$GITHUB_WORKSPACE/secondary_disk/depot_tools:$PATH"
           export VPYTHON_BYPASS="manually managed inventory"
           
-          # Kembali ke root folder source code
-          cd $GITHUB_WORKSPACE
+          # 2. Sinkronisasi dependency yang hilang (PENTING)
+          # Ini akan mendownload semua third_party yang kurang
+          gclient sync --force --nohooks --no-history --shallow
           
-          # Inisialisasi gclient untuk memastikan semua tool siap
-          gclient --version
+          # 3. Jalankan hooks untuk setup toolchain Android
+          gclient runhooks
           
-          # Jalankan build
+          # 4. Generate build files
           gn gen ./secondary_disk/out/android_${{ matrix.platform }}
-          ninja -C ./secondary_disk/out/android_${{ matrix.platform }} chrome_public_apk
+          
+          # 5. Build dengan pembatasan job (biar RAM/Disk gak meledak)
+          # Kita pakai -j 2 supaya gak terlalu rakus resource
+          ninja -j 2 -C ./secondary_disk/out/android_${{ matrix.platform }} chrome_public_apk
 
       - name: Uploading APK Artifact
         uses: actions/upload-artifact@v4
