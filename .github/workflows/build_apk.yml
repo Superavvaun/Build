@@ -328,7 +328,7 @@ jobs:
           echo Compression completed.
 
       - name: Uploading APK
-        uses: actions/upload-artifact@v1
+        uses: actions/upload-artifact@v4  # Changed from v1
         with:
           name: apk-${{ matrix.platform }}
           path: ./secondary_disk/out/android_${{ matrix.platform }}/apks/
@@ -377,24 +377,28 @@ jobs:
             https://github.com/kiwibrowser/src.next/releases
 
       - name: Downloading artifact (arm)
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@v4  # Changed from v1
         with:
           name: apk-arm
+          path: apk-arm                     # Optional: v4 downloads into a folder named after the artifact by default
 
       - name: Downloading artifact (arm64)
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@v4  # Changed from v1
         with:
           name: apk-arm64
+          path: apk-arm64
 
       - name: Downloading artifact (x86)
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@v4  # Changed from v1
         with:
           name: apk-x86
+          path: apk-x86
 
       - name: Downloading artifact (x64)
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@v4  # Changed from v1
         with:
           name: apk-x64
+          path: apk-x64
 
       - name: Uploading mapping file into GitHub release (arm)
         uses: actions/upload-release-asset@v1
