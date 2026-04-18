@@ -1,17 +1,12 @@
-# Build APK for Kiwi Browser (ARM64 Only - Fixed Version)
-name: build
+name: build apk
 
 on:
   workflow_dispatch:
-    inputs:
-      prepareRelease:
-        description: 'Create a draft release'     
-        required: true
-        default: 'no'
 
 jobs:
   build:
-    runs-on: ubuntu-latest # Sudah diupdate dari 20.04
+    # Using 22.04 because the Kiwi install script recognizes it
+    runs-on: ubuntu-22.04 
 
     strategy:
       fail-fast: false
@@ -20,29 +15,27 @@ jobs:
 
     steps:
       - name: Initializing build
-        run: echo Initializing build for platform ${{ matrix.platform }}
+        run: echo "Starting build for ${{ matrix.platform }}..."
 
       - name: Reclaiming disk space
         run: |
           sudo swapoff -av
           sudo rm -f /swapfile
-          sudo rm -rf /usr/share/dotnet /imagegeneration
+          sudo rm -rf /usr/share/dotnet
+          sudo apt-get clean
 
       - name: Checking-out source-code
-        uses: actions/checkout@v4 # Update ke v4
+        uses: actions/checkout@v4
 
       - name: Creating secondary disk folder
         run: |
           sudo mkdir -p /extended_data
           sudo chown -R runner:docker /extended_data
-      
-      - name: Link SSD
-        run: |
           sudo ln -s /extended_data /mnt/secondary_disk
           sudo ln -s /mnt/secondary_disk $GITHUB_WORKSPACE/
 
       - name: Checking-out CIPD dependencies
-        uses: actions/checkout@v4 # Update ke v4
+        uses: actions/checkout@v4
         with:
           repository: kiwibrowser/dependencies
           path: ./secondary_disk/.cipd 
@@ -56,24 +49,33 @@ jobs:
       - name: Installing system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3 python-is-python3 openjdk-11-jdk-headless libncurses6 ccache ninja-build
-          sudo ln -s /usr/lib/x86_64-linux-gnu/libncursesw.so.6 /usr/lib/x86_64-linux-gnu/libncurses.so.5
-          sudo bash install-build-deps.sh --no-chromeos-fonts
+          # Install Python 2 and 3 + JDK 11 (Standard for Ubuntu 22.04)
+          sudo apt-get install -y python2 python3 openjdk-11-jdk-headless libncurses5 ccache ninja-build
+          # Force 'python' command to use python2 (Kiwi legacy requirement)
+          sudo ln -sf /usr/bin/python2 /usr/bin/python
           
+          # Bypass OS check if the script is still being picky
+          export DEBIAN_FRONTEND=noninteractive
+          sudo bash install-build-deps.sh --no-chromeos-fonts --arm
+
       - name: Generating build files
         run: |
           mkdir -p secondary_disk/out/android_${{ matrix.platform }}
-          cat .build/android_arm/args.gn | sed "s#target_cpu = \"arm\"#target_cpu = \"${{ matrix.platform }}\"#" > secondary_disk/out/android_${{ matrix.platform }}/args.gn
-          # Tambahkan git clone depot_tools di sini jika script membutuhkannya
+          cp .build/android_arm/args.gn secondary_disk/out/android_${{ matrix.platform }}/args.gn
+          sed -i 's/target_cpu = "arm"/target_cpu = "arm64"/' secondary_disk/out/android_${{ matrix.platform }}/args.gn
+
+      - name: Downloading depot_tools
+        run: git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git $GITHUB_WORKSPACE/secondary_disk/depot_tools
 
       - name: Compiling source-code
         run: |
-          # Perintah GN dan Ninja kamu di sini
-          echo "Starting Ninja Build..."
+          export PATH="$PATH:$GITHUB_WORKSPACE/secondary_disk/depot_tools"
+          # These steps might take 1-2 hours
+          # gn gen ./secondary_disk/out/android_${{ matrix.platform }}
           # ninja -C ./secondary_disk/out/android_${{ matrix.platform }} chrome_public_apk
 
       - name: Uploading APK Artifact
-        uses: actions/upload-artifact@v4 # Update ke v4 (SOLUSI ERROR TADI)
+        uses: actions/upload-artifact@v4
         with:
           name: apk-arm64
           path: ./secondary_disk/out/android_arm64/apks/
@@ -84,17 +86,18 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Downloading artifact (arm64)
-        uses: actions/download-artifact@v4 # Update ke v4
+      - name: Downloading artifact
+        uses: actions/download-artifact@v4
         with:
           name: apk-arm64
           path: ./apk-arm64
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2 # Pakai versi baru
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_id }}
-          name: Aesthetic Browser v1
+          name: Aesthetic Browser v1.0.0
           files: ./apk-arm64/*.apk
+          body: "Official build for ARM64 devices."
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
