@@ -1,5 +1,5 @@
 # Build APKs for Kiwi Browser (Fork Optimized - 64bit Only)
-name: arm64
+name: build apk
 
 on:
   workflow_dispatch:
@@ -51,7 +51,7 @@ jobs:
           repository: kiwibrowser/dependencies
           path: ./secondary_disk/.cipd 
 
-      # MEMPERBAIKI MASALAH "CLIENT NOT CONFIGURED" (.gclient config fix)
+      # MEMPERBAIKI MASALAH "CLIENT NOT CONFIGURED"
       - name: Linking .cipd and fixing .gclient config for custom repo name
         run: |
           ln -sf $GITHUB_WORKSPACE/secondary_disk/.cipd $GITHUB_WORKSPACE/../.cipd
@@ -61,18 +61,22 @@ jobs:
           REPO_NAME=$(basename $GITHUB_WORKSPACE)
           echo "Mendeteksi nama repositori: $REPO_NAME"
           
-          # Mengganti 'src' dengan nama repo milikmu (misal Superavvaun/...)
           sed -i "s/\"name\"[[:space:]]*:[[:space:]]*\"src\"/\"name\"        : \"$REPO_NAME\"/g" $GITHUB_WORKSPACE/../.gclient
           cat $GITHUB_WORKSPACE/../.gclient
 
-      - name: Updating APT repository
-        run: sudo apt-get update
+      # UPGRADE KE PYTHON 3.11 UNTUK MEMPERBAIKI ERROR STRENUM PADA DEPOT_TOOLS BARU
+      - name: Installing Python 3.11, Python 2, and OpenJDK
+        run: |
+          sudo add-apt-repository ppa:deadsnakes/ppa -y
+          sudo apt-get update
+          sudo apt-get install -y python3.11 python3.11-distutils python3.11-venv python2 openjdk-8-jdk-headless libncurses5 ccache ninja-build
+          
+          # Memaksa sistem menggunakan Python 3.11 sebagai default
+          sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
+          sudo update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
+          python3 --version
 
-      # MENAMBAHKAN PYTHON 2 UNTUK MEMPERBAIKI SYNTAX ERROR
-      - name: Installing Python and OpenJDK
-        run: sudo apt-get install -y python3 python-is-python3 python2 openjdk-8-jdk-headless libncurses5 ccache ninja-build
-
-      # MENGGUNAKAN PYTHON 2 KHUSUS UNTUK SCRIPT LAMA CHROMIUM
+      # MENGGUNAKAN PYTHON 2 KHUSUS UNTUK SCRIPT DEPENDENSI LAMA
       - name: Installing system dependencies
         run: |
           sudo bash install-build-deps.sh --no-chromeos-fonts
@@ -103,7 +107,7 @@ jobs:
           echo "CC=ccache clang -Qunused-arguments" >> $GITHUB_ENV
           echo "CXX=ccache clang++ -Qunused-arguments" >> $GITHUB_ENV
 
-      # BYPASS RCLONE AGAR TIDAK ERROR EXIT CODE 1 DI FORK REPO
+      # BYPASS RCLONE CACHE
       - name: Creating rclone config
         if: ${{ github.repository_owner == 'kiwibrowser' }}
         run: |
@@ -119,13 +123,12 @@ jobs:
         run: curl -s "https://omahaproxy.appspot.com/all" | grep -Fi "android,stable" | cut -f3 -d"," | awk '{split($0,a,"."); print "MAJOR=" a[1] "\nMINOR=" a[2] "\nBUILD=" a[3] "\nPATCH=" a[4]}' > chrome/VERSION
 
       - name: Running gclient runhooks
-        # Tambahkan flag khusus agar depot_tools menggunakan python2 secara paksa jika diminta
         run: export VPYTHON_BYPASS="manually managed python not supported by chrome operations" && gclient runhooks
 
       - name: Generating build files
         run: gn gen ./secondary_disk/out/android_${{ matrix.platform }}
 
-      # --- TAHAP KOMPILASI NINJA ---
+      # --- TAHAP KOMPILASI ---
       - name: Compiling source-code (base)
         run: ninja -C ./secondary_disk/out/android_${{ matrix.platform }} base
 
@@ -182,12 +185,12 @@ jobs:
           name: apk-${{ matrix.platform }}
           path: ./secondary_disk/out/android_${{ matrix.platform }}/apks/
 
-  # JOB KEDUA: RILIS OTOMATIS KE GITHUB
+  # JOB KEDUA: RILIS OTOMATIS
   sign_and_upload:
     runs-on: ubuntu-latest
     needs: build
     permissions:
-      contents: write # Wajib untuk membuat release otomatis
+      contents: write
 
     steps:
       - name: Downloading artifact (arm64)
@@ -210,7 +213,6 @@ jobs:
             ### ⚠️ DISCLAIMER PENTING
             * **Bukan Rilis Resmi:** Ini adalah modifikasi pribadi. Jangan laporkan *bug* ke pengembang resmi Kiwi Browser.
             * **Risiko Pengguna:** Disediakan "apa adanya". Semua risiko keamanan dan performa ditanggung pengguna.
-            * **Tanpa Sync & Auto-Update:** Sinkronisasi Google tidak berjalan, dan kamu harus mengunduh versi baru secara manual di halaman ini.
 
             **Silakan unduh file `.apk` di bagian Assets di bawah untuk menginstal.**
           files: |
