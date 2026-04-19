@@ -51,33 +51,48 @@ jobs:
           repository: kiwibrowser/dependencies
           path: ./secondary_disk/.cipd 
 
-      # THE MAGIC FIX: MENIPU CHROMIUM DENGAN SYMLINK 'src'
-      - name: Setup gclient environment (The 'src' Symlink Fix)
+      # THE MAGIC FIX: MENIPU CHROMIUM & SINKRONISASI CONFIG
+      - name: Setup gclient environment
         run: |
-          # 1. Menautkan konfigurasi bawaan asli
           ln -sf $GITHUB_WORKSPACE/secondary_disk/.cipd $GITHUB_WORKSPACE/../.cipd
           cp $GITHUB_WORKSPACE/../.cipd/.gclient $GITHUB_WORKSPACE/../.gclient
           cp $GITHUB_WORKSPACE/../.cipd/.gclient_entries $GITHUB_WORKSPACE/../.gclient_entries
           
-          # 2. Membuat jalan pintas (symlink) bernama 'src' yang mengarah ke folder repo kamu.
-          # Ini akan membuat semua script internal Chromium percaya bahwa mereka ada di folder 'src'.
           ln -sf $GITHUB_WORKSPACE $GITHUB_WORKSPACE/../src
           
-          echo "Symlink 'src' berhasil dibuat! Chromium berhasil ditipu."
+          cd ..
+          python3 -c "
+          import os
+          repo = os.path.basename(os.environ['GITHUB_WORKSPACE'])
+          for file in ['.gclient', '.gclient_entries']:
+              with open(file, 'r') as f: t = f.read()
+              t = t.replace('\"src\"', '\"' + repo + '\"')
+              t = t.replace(\"'src'\", \"'\" + repo + \"'\")
+              t = t.replace('\"src/', '\"' + repo + '/')
+              t = t.replace(\"'src/\", \"'\" + repo + \"/\")
+              with open(file, 'w') as f: f.write(t)
+          "
+          echo "Symlink 'src' dan Config telah beres!"
 
-      # UPGRADE KE PYTHON 3.11 UNTUK DEPOT_TOOLS
-      - name: Installing Python 3.11, Python 2, and OpenJDK
+      # FASE 1: PYTHON 2 SEBAGAI DEFAULT UNTUK SETUP & RUNHOOKS
+      - name: Installing & Configuring Python (Phase 1 - Python 2)
         run: |
           sudo add-apt-repository ppa:deadsnakes/ppa -y
           sudo apt-get update
           sudo apt-get install -y python3.11 python3.11-distutils python3.11-venv python2 openjdk-8-jdk-headless libncurses5 ccache ninja-build
           
-          # Paksa sistem menggunakan Python 3.11 sebagai default utama
+          # Hapus link lama
+          sudo apt-get remove -y python-is-python3
+          
+          # Setup python3 -> python3.11
           sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
-          sudo update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
+          
+          # Setup python -> python2 (Untuk script jadul)
+          sudo update-alternatives --install /usr/bin/python python /usr/bin/python2 1
+          
+          echo "Fase 1 - Cek Versi Default:"
           python --version
 
-      # MENGGUNAKAN PYTHON 2 KHUSUS UNTUK SCRIPT DEPENDENSI LAMA
       - name: Installing system dependencies
         run: |
           sudo bash install-build-deps.sh --no-chromeos-fonts
@@ -123,14 +138,23 @@ jobs:
       - name: Fetching number for the latest stable version of Chromium
         run: curl -s "https://omahaproxy.appspot.com/all" | grep -Fi "android,stable" | cut -f3 -d"," | awk '{split($0,a,"."); print "MAJOR=" a[1] "\nMINOR=" a[2] "\nBUILD=" a[3] "\nPATCH=" a[4]}' > chrome/VERSION
 
-      # RUNHOOKS (Sekarang akan berjalan mulus karena folder 'src' sudah ada)
+      # RUNHOOKS (Aman menggunakan Python 2)
       - name: Running gclient runhooks
         run: gclient runhooks
+
+      # FASE 2: GANTI PYTHON 3.11 SEBAGAI DEFAULT UNTUK KOMPILASI
+      - name: Switch Python to version 3.11 for Ninja Compilation
+        run: |
+          # Timpa default python kembali ke python 3.11
+          sudo update-alternatives --install /usr/bin/python python /usr/bin/python3.11 2
+          sudo update-alternatives --set python /usr/bin/python3.11
+          echo "Fase 2 - Cek Versi Default (Harus Python 3):"
+          python --version
 
       - name: Generating build files
         run: gn gen ./secondary_disk/out/android_${{ matrix.platform }}
 
-      # --- TAHAP KOMPILASI ---
+      # --- TAHAP KOMPILASI (Sekarang akan paham format modern) ---
       - name: Compiling source-code (base)
         run: ninja -C ./secondary_disk/out/android_${{ matrix.platform }} base
 
