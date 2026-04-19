@@ -1,4 +1,4 @@
-# Build APKs for Kiwi Browser (Fork Optimized - 64bit Only - Ultimate Fix)
+# Build APKs for Kiwi Browser (Fork Optimized - 64bit Only - Mega Fix)
 name: build apk
 
 on:
@@ -15,49 +15,40 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # HANYA BUILD 64-BIT (ARM64)
         platform: [arm64]
 
     steps:
       - name: Initializing build
         run: echo Initializing build for platform ${{ matrix.platform }}
 
-      - name: Reclaiming disk space on / by disabling swap partition
+      - name: Reclaiming disk space
         run: |
           sudo swapoff -av
           sudo rm -f /swapfile
-
-      - name: Reclaiming HUGE disk space on / by removing unused GitHub dependencies
-        run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /imagegeneration
           sudo apt-get clean
 
-      - name: Checking-out source-code in $GITHUB_WORKSPACE
+      - name: Checking-out source-code
         uses: actions/checkout@v4
 
-      - name: Creating secondary disk folder on /dev/disk/azure/resource-part1 (SSD)
+      - name: Creating secondary disk folder (SSD)
         run: |
           sudo mkdir -p /extended_data
           sudo chown -R runner:docker /extended_data
-      
-      - name: On SSD - Creating symlink on /dev/disk/azure/root-part1 pointing to /dev/disk/azure/resource-part1
-        run: |
           sudo ln -s /extended_data /mnt/secondary_disk
           sudo ln -s /mnt/secondary_disk $GITHUB_WORKSPACE/
 
-      - name: Checking-out CIPD dependencies in /mnt/secondary_disk/.cipd
+      - name: Checking-out CIPD dependencies
         uses: actions/checkout@v4
         with:
           repository: kiwibrowser/dependencies
           path: ./secondary_disk/.cipd 
 
-      - name: Setup gclient environment & Sync configs
+      - name: Setup gclient environment & src symlink
         run: |
           ln -sf $GITHUB_WORKSPACE/secondary_disk/.cipd $GITHUB_WORKSPACE/../.cipd
           cp $GITHUB_WORKSPACE/../.cipd/.gclient $GITHUB_WORKSPACE/../.gclient
           cp $GITHUB_WORKSPACE/../.cipd/.gclient_entries $GITHUB_WORKSPACE/../.gclient_entries
-          
-          # Jurus Bayangan: Menipu Chromium dengan symlink 'src'
           ln -sf $GITHUB_WORKSPACE $GITHUB_WORKSPACE/../src
           
           cd ..
@@ -66,15 +57,11 @@ jobs:
           repo = os.path.basename(os.environ['GITHUB_WORKSPACE'])
           for file in ['.gclient', '.gclient_entries']:
               with open(file, 'r') as f: t = f.read()
-              t = t.replace('\"src\"', '\"' + repo + '\"')
-              t = t.replace(\"'src'\", \"'\" + repo + \"'\")
-              t = t.replace('\"src/', '\"' + repo + '/')
-              t = t.replace(\"'src/\", \"'\" + repo + \"/\")
+              t = t.replace('\"src\"', '\"' + repo + '\"').replace(\"'src'\", \"'\" + repo + \"'\")
+              t = t.replace('\"src/', '\"' + repo + '/').replace(\"'src/\", \"'\" + repo + \"/\")
               with open(file, 'w') as f: f.write(t)
           "
-          echo "Symlink 'src' dan Config telah beres!"
 
-      # INSTALL PYTHON SEBELUM SYSTEM DEPENDENCIES (Aman untuk apt-get Ubuntu)
       - name: Installing Python packages & OpenJDK
         run: |
           sudo add-apt-repository ppa:deadsnakes/ppa -y
@@ -88,34 +75,19 @@ jobs:
           python2 build/linux/sysroot_scripts/install-sysroot.py --arch=i386
           python2 build/linux/sysroot_scripts/install-sysroot.py --arch=amd64
 
-      # KONFIGURASI PYTHON FASE 1 (Untuk runhooks dan script jadul)
-      - name: Configuring Python (Phase 1 - Python 2 for Runhooks)
+      - name: Configuring Python (Phase 1)
         run: |
           sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
           sudo update-alternatives --install /usr/bin/python python /usr/bin/python2 1
-          echo "Fase 1 - Cek Versi Default:"
-          python --version
 
-      - name: Creating output folder
-        run: mkdir -p secondary_disk/out/android_${{ matrix.platform }}
-
-      - name: Generating one-time APK signature key
-        run: keytool -genkey -v -keystore keystore.jks -alias dev -keyalg RSA -keysize 2048 -validity 10000 -storepass public_password -keypass public_password -dname "cn=Kiwi Browser (unverified), ou=Actions, o=Kiwi Browser, c=GitHub"
-
-      - name: Copying args.gn to target folder
-        run: cat .build/android_arm/args.gn | sed "s#target_cpu = \"arm\"#target_cpu = \"${{ matrix.platform }}\"#" | sed "s#android_default_version_name = \"Git\"#android_default_version_name = \"Git$(date '+%y%m%d')Gen${{ github.run_id }}\"#" > secondary_disk/out/android_${{ matrix.platform }}/args.gn
-
-      - name: Modifying args.gn (arm64)
-        run: sed -i "s#android_default_version_code = \"1\"#android_default_version_code = \"$(date '+%y%m%d')2\"#" secondary_disk/out/android_${{ matrix.platform }}/args.gn
-
-      # MENGUNDUH DEPOT_TOOLS DAN MEMBUAT FILTER VPYTHON PINTAR
-      - name: Downloading depot_tools and patching vpython
+      # [PERBAIKAN KRUSIAL] MEMBUAT SEMUA VARIAN VPYTHON
+      - name: Downloading depot_tools and patching ALL vpython variants
         working-directory: ./secondary_disk
         run: |
           git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
           
-          # Filter pintar untuk vpython (Arahkan ke Python 2)
-          cat << 'EOF' > depot_tools/vpython
+          # Script filter universal
+          cat << 'EOF' > depot_tools/vpython_filter
           #!/bin/bash
           args=()
           skip=0
@@ -127,165 +99,76 @@ jobs:
             fi
             args+=("$arg")
           done
-          exec python2 "${args[@]}"
+          # Jika script dipanggil sebagai vpython3, gunakan python3.11, jika tidak gunakan python2
+          if [[ "$0" == *"vpython3"* ]]; then
+            exec python3.11 "${args[@]}"
+          else
+            exec python2 "${args[@]}"
+          fi
           EOF
-          chmod +x depot_tools/vpython
-
-          # Filter pintar untuk vpython3 (Arahkan ke Python 3)
-          cat << 'EOF' > depot_tools/vpython3
-          #!/bin/bash
-          args=()
-          skip=0
-          for arg in "$@"; do
-            if [ $skip -eq 1 ]; then skip=0; continue; fi
-            if [[ "$arg" == -vpython* ]]; then
-              if [[ "$arg" != *"="* ]]; then skip=1; fi
-              continue
-            fi
-            args+=("$arg")
-          done
-          exec python3 "${args[@]}"
-          EOF
-          chmod +x depot_tools/vpython3
+          
+          chmod +x depot_tools/vpython_filter
+          # Membuat semua alias yang mungkin dicari oleh Chromium
+          ln -sf vpython_filter depot_tools/vpython
+          ln -sf vpython_filter depot_tools/vpython3
+          ln -sf vpython_filter depot_tools/vpython-native
 
       - name: Adding depot_tools to path
         run: echo "$GITHUB_WORKSPACE/secondary_disk/depot_tools" >> $GITHUB_PATH
 
-      - name: Setting environment variables
-        run: |
-          echo "CC=ccache clang -Qunused-arguments" >> $GITHUB_ENV
-          echo "CXX=ccache clang++ -Qunused-arguments" >> $GITHUB_ENV
-          export VPYTHON_BYPASS="manually managed python not supported by chrome operations"
-
-      - name: Creating rclone config
-        if: ${{ github.repository_owner == 'kiwibrowser' }}
-        run: |
-          curl https://rclone.org/install.sh | sudo bash
-          mkdir -p $HOME/.config/rclone/
-          echo '[cache]' > $HOME/.config/rclone/rclone.conf
-          echo 'type = sftp' >> $HOME/.config/rclone/rclone.conf
-          echo 'host = ${{ secrets.STORAGE_HOST }}' >> $HOME/.config/rclone/rclone.conf
-          echo 'user = storage' >> $HOME/.config/rclone/rclone.conf
-          echo 'key_pem = ${{ secrets.STORAGE_KEY }}' >> $HOME/.config/rclone/rclone.conf
-
-      - name: Fetching number for the latest stable version of Chromium
+      - name: Fetching Chromium version
         run: curl -s "https://omahaproxy.appspot.com/all" | grep -Fi "android,stable" | cut -f3 -d"," | awk '{split($0,a,"."); print "MAJOR=" a[1] "\nMINOR=" a[2] "\nBUILD=" a[3] "\nPATCH=" a[4]}' > chrome/VERSION
 
-      # MENCEGAH DOWNLOAD TRAFFIC ANNOTATION YANG SUDAH DIHAPUS GOOGLE
       - name: Bypass missing Traffic Annotation tools
-        run: |
-          rm -f $GITHUB_WORKSPACE/../src/tools/traffic_annotation/bin/linux64/*.sha1 || true
-          echo "Bypass berhasil: File .sha1 untuk traffic annotation telah dihapus (jika ada)."
+        run: rm -f $GITHUB_WORKSPACE/../src/tools/traffic_annotation/bin/linux64/*.sha1 || true
 
-      # RUNHOOKS
       - name: Running gclient runhooks
         run: gclient runhooks
 
-      # FASE 2: GANTI PYTHON 3.11 SEBAGAI DEFAULT UNTUK KOMPILASI
-      - name: Switch Python to version 3.11 for Ninja Compilation
+      - name: Switch Python to version 3.11 for Compilation
         run: |
           sudo update-alternatives --install /usr/bin/python python /usr/bin/python3.11 2
           sudo update-alternatives --set python /usr/bin/python3.11
-          echo "Fase 2 - Cek Versi Default (Harus Python 3):"
-          python --version
-          
-          # Bersihkan cache vpython
           rm -rf $HOME/.vpython-root
-          rm -rf $GITHUB_WORKSPACE/secondary_disk/.cipd/.vpython-root
 
-      - name: Generating build files
+      - name: Creating signature & args.gn
+        run: |
+          keytool -genkey -v -keystore keystore.jks -alias dev -keyalg RSA -keysize 2048 -validity 10000 -storepass public_password -keypass public_password -dname "cn=Kiwi Browser, ou=Actions, o=Kiwi, c=GitHub"
+          mkdir -p secondary_disk/out/android_${{ matrix.platform }}
+          cat .build/android_arm/args.gn | sed "s#target_cpu = \"arm\"#target_cpu = \"${{ matrix.platform }}\"#" | sed "s#android_default_version_name = \"Git\"#android_default_version_name = \"Git$(date '+%y%m%d')Gen${{ github.run_id }}\"#" > secondary_disk/out/android_${{ matrix.platform }}/args.gn
+          sed -i "s#android_default_version_code = \"1\"#android_default_version_code = \"$(date '+%y%m%d')2\"#" secondary_disk/out/android_${{ matrix.platform }}/args.gn
+
+      - name: Generating build files (GN GEN)
         run: |
           export VPYTHON_BYPASS="manually managed python not supported by chrome operations"
           gn gen ./secondary_disk/out/android_${{ matrix.platform }}
 
-      # --- TAHAP KOMPILASI (Ninja akan bekerja keras di sini) ---
-      - name: Compiling source-code (base)
-        run: ninja -C ./secondary_disk/out/android_${{ matrix.platform }} base
-
-      - name: Compiling source-code (content/public)
+      - name: Compiling source-code (NINJA)
         run: |
-          ninja -C ./secondary_disk/out/android_${{ matrix.platform }} content/public/common
-          ninja -C ./secondary_disk/out/android_${{ matrix.platform }} content/public/browser
+          ninja -C ./secondary_disk/out/android_${{ matrix.platform }} base
+          ninja -C ./secondary_disk/out/android_${{ matrix.platform }} chrome_public_apk
 
-      - name: Compiling source-code (components & gpu)
-        run: |
-          ninja -C ./secondary_disk/out/android_${{ matrix.platform }} components/guest_view/common
-          ninja -C ./secondary_disk/out/android_${{ matrix.platform }} components/guest_view/renderer
-          ninja -C ./secondary_disk/out/android_${{ matrix.platform }} chrome/gpu
-          ninja -C ./secondary_disk/out/android_${{ matrix.platform }} components/version_info
-
-      - name: Compiling source-code (chrome_java & ui)
-        run: |
-          ninja -C ./secondary_disk/out/android_${{ matrix.platform }} chrome_java
-          ninja -C ./secondary_disk/out/android_${{ matrix.platform }} ui/base
-          ninja -C ./secondary_disk/out/android_${{ matrix.platform }} chrome/browser:resources
-  
-      - name: Compiling source-code (browser core)
-        run: |
-          ninja -C ./secondary_disk/out/android_${{ matrix.platform }} chrome/browser/ui
-          ninja -C ./secondary_disk/out/android_${{ matrix.platform }} chrome/browser
-          ninja -C ./secondary_disk/out/android_${{ matrix.platform }} chrome/common
-          ninja -C ./secondary_disk/out/android_${{ matrix.platform }} chrome/renderer
-
-      - name: Compiling source-code (extensions & services)
-        run: |
-          ninja -C ./secondary_disk/out/android_${{ matrix.platform }} extensions
-          ninja -C ./secondary_disk/out/android_${{ matrix.platform }} services
-          ninja -C ./secondary_disk/out/android_${{ matrix.platform }} v8
-
-      - name: Checking available memory and listing processes
-        run: |
-          free -m
-          ps auxww
-
-      - name: Compiling source-code (FINAL APK)
-        run: ninja -C ./secondary_disk/out/android_${{ matrix.platform }} chrome_public_apk
-
-      - name: Generating native symbols mapping
-        run: |
-          mkdir -p ./secondary_disk/out/lnx64
-          cp -v ../.cipd/tools/* ./secondary_disk/out/lnx64/
-          chmod +x ./secondary_disk/out/lnx64/dump_syms
-          python2 components/crash/content/tools/generate_breakpad_symbols.py --build-dir=./secondary_disk/out/lnx64 --symbols-dir=/tmp/extracted_symbols/ --binary=./secondary_disk/out/android_${{ matrix.platform }}/lib.unstripped/libchrome.so --clear --verbose
-          tar -czvf ./secondary_disk/out/android_${{ matrix.platform }}/apks/ChromePublic.native.mapping.tar.gz /tmp/extracted_symbols
-
-      - name: Uploading APK to Actions Artifacts
+      - name: Uploading APK to Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: apk-${{ matrix.platform }}
           path: ./secondary_disk/out/android_${{ matrix.platform }}/apks/
 
-  # JOB KEDUA: RILIS OTOMATIS
   sign_and_upload:
     runs-on: ubuntu-latest
     needs: build
-    permissions:
-      contents: write
-
+    permissions: { contents: write }
     steps:
-      - name: Downloading artifact (arm64)
+      - name: Downloading artifact
         uses: actions/download-artifact@v4
-        with:
-          name: apk-arm64
-          path: apk-arm64
-
-      - name: Create Release and Upload All Assets
+        with: { name: apk-arm64, path: apk-arm64 }
+      - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_id }}
-          name: "Kiwi Custom Build (arm64) - Gen ${{ github.run_id }}"
-          draft: false
+          name: "Kiwi arm64 - Gen ${{ github.run_id }}"
           prerelease: true
-          body: |
-            ## 🥝 Kiwi Browser - Custom Build (arm64)
-            Versi ini dikompilasi secara otomatis untuk arsitektur `arm64-v8a`.
-            
-            ### ⚠️ DISCLAIMER PENTING
-            * **Bukan Rilis Resmi:** Ini adalah modifikasi pribadi. Jangan laporkan *bug* ke pengembang resmi Kiwi Browser.
-            * **Risiko Pengguna:** Disediakan "apa adanya". Semua risiko keamanan dan performa ditanggung pengguna.
-
-            **Silakan unduh file `.apk` di bagian Assets di bawah untuk menginstal.**
+          body: "Build otomatis Kiwi Browser arm64 (Public Archive)."
           files: |
             ./apk-arm64/*.apk
             ./apk-arm64/*.mapping
-            ./apk-arm64/*.tar.gz
