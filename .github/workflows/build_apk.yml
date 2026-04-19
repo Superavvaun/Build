@@ -73,7 +73,7 @@ jobs:
           "
           echo "Symlink 'src' dan Config telah beres!"
 
-      # INSTALL PYTHON & DEPENDENCIES (Tanpa mengubah default python dulu agar apt-get tidak rusak)
+      # INSTALL PYTHON SEBELUM SYSTEM DEPENDENCIES (Aman untuk apt-get)
       - name: Installing Python packages & OpenJDK
         run: |
           sudo add-apt-repository ppa:deadsnakes/ppa -y
@@ -81,13 +81,13 @@ jobs:
           sudo apt-get install -y python3.11 python3.11-distutils python3.11-venv python2 openjdk-8-jdk-headless libncurses5 ccache ninja-build
           sudo apt-get remove -y python-is-python3
 
-      - name: Installing system dependencies (Aman untuk apt-get)
+      - name: Installing system dependencies
         run: |
           sudo bash install-build-deps.sh --no-chromeos-fonts
           python2 build/linux/sysroot_scripts/install-sysroot.py --arch=i386
           python2 build/linux/sysroot_scripts/install-sysroot.py --arch=amd64
 
-      # MENGUBAH DEFAULT PYTHON SETELAH APT-GET SELESAI
+      # KONFIGURASI PYTHON FASE 1 UNTUK RUNHOOKS
       - name: Configuring Python (Phase 1 - Python 2 for Runhooks)
         run: |
           sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
@@ -107,9 +107,14 @@ jobs:
       - name: Modifying args.gn (arm64)
         run: sed -i "s#android_default_version_code = \"1\"#android_default_version_code = \"$(date '+%y%m%d')2\"#" secondary_disk/out/android_${{ matrix.platform }}/args.gn
 
-      - name: Downloading depot_tools
+      # MENGUNDUH DEPOT_TOOLS DAN MEMBUAT VPYTHON PALSU
+      - name: Downloading depot_tools and patching vpython
         working-directory: ./secondary_disk
-        run: git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+        run: |
+          git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+          echo '#!/bin/bash' > depot_tools/vpython
+          echo 'python "$@"' >> depot_tools/vpython
+          chmod +x depot_tools/vpython
 
       - name: Adding depot_tools to path
         run: echo "$GITHUB_WORKSPACE/secondary_disk/depot_tools" >> $GITHUB_PATH
@@ -118,6 +123,7 @@ jobs:
         run: |
           echo "CC=ccache clang -Qunused-arguments" >> $GITHUB_ENV
           echo "CXX=ccache clang++ -Qunused-arguments" >> $GITHUB_ENV
+          export VPYTHON_BYPASS="manually managed python not supported by chrome operations"
 
       - name: Creating rclone config
         if: ${{ github.repository_owner == 'kiwibrowser' }}
