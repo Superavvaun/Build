@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # HANYA BUILD 64-BIT (ARM64) UNTUK ANDROID
+        # HANYA BUILD 64-BIT (ARM64)
         platform: [arm64]
 
     steps:
@@ -60,14 +60,16 @@ jobs:
       - name: Updating APT repository
         run: sudo apt-get update
 
+      # MENAMBAHKAN PYTHON 2 UNTUK MEMPERBAIKI SYNTAX ERROR
       - name: Installing Python and OpenJDK
-        run: sudo apt-get install -y python3 python-is-python3 openjdk-8-jdk-headless libncurses5 ccache ninja-build
+        run: sudo apt-get install -y python3 python-is-python3 python2 openjdk-8-jdk-headless libncurses5 ccache ninja-build
 
+      # MENGGUNAKAN PYTHON 2 KHUSUS UNTUK SCRIPT LAMA CHROMIUM
       - name: Installing system dependencies
         run: |
           sudo bash install-build-deps.sh --no-chromeos-fonts
-          python build/linux/sysroot_scripts/install-sysroot.py --arch=i386
-          python build/linux/sysroot_scripts/install-sysroot.py --arch=amd64
+          python2 build/linux/sysroot_scripts/install-sysroot.py --arch=i386
+          python2 build/linux/sysroot_scripts/install-sysroot.py --arch=amd64
 
       - name: Creating output folder
         run: mkdir -p secondary_disk/out/android_${{ matrix.platform }}
@@ -93,7 +95,7 @@ jobs:
           echo "CC=ccache clang -Qunused-arguments" >> $GITHUB_ENV
           echo "CXX=ccache clang++ -Qunused-arguments" >> $GITHUB_ENV
 
-      # RCLONE DIBATASI HANYA UNTUK REPO ASLI (Mencegah Exit Code 1)
+      # BYPASS RCLONE AGAR TIDAK ERROR EXIT CODE 1 DI FORK REPO
       - name: Creating rclone config
         if: ${{ github.repository_owner == 'kiwibrowser' }}
         run: |
@@ -114,8 +116,7 @@ jobs:
       - name: Generating build files
         run: gn gen ./secondary_disk/out/android_${{ matrix.platform }}
 
-      # --- KOMPILASI ---
-      # Karena kita tidak upload ke cache milik Kiwi, langkah upload antar kompilasi saya hapus agar log lebih bersih.
+      # --- TAHAP KOMPILASI NINJA ---
       - name: Compiling source-code (base)
         run: ninja -C ./secondary_disk/out/android_${{ matrix.platform }} base
 
@@ -163,7 +164,7 @@ jobs:
           mkdir -p ./secondary_disk/out/lnx64
           cp -v ../.cipd/tools/* ./secondary_disk/out/lnx64/
           chmod +x ./secondary_disk/out/lnx64/dump_syms
-          python components/crash/content/tools/generate_breakpad_symbols.py --build-dir=./secondary_disk/out/lnx64 --symbols-dir=/tmp/extracted_symbols/ --binary=./secondary_disk/out/android_${{ matrix.platform }}/lib.unstripped/libchrome.so --clear --verbose
+          python2 components/crash/content/tools/generate_breakpad_symbols.py --build-dir=./secondary_disk/out/lnx64 --symbols-dir=/tmp/extracted_symbols/ --binary=./secondary_disk/out/android_${{ matrix.platform }}/lib.unstripped/libchrome.so --clear --verbose
           tar -czvf ./secondary_disk/out/android_${{ matrix.platform }}/apks/ChromePublic.native.mapping.tar.gz /tmp/extracted_symbols
 
       - name: Uploading APK to Actions Artifacts
@@ -172,12 +173,12 @@ jobs:
           name: apk-${{ matrix.platform }}
           path: ./secondary_disk/out/android_${{ matrix.platform }}/apks/
 
-  # JOB KEDUA: Upload Otomatis ke GitHub Releases
+  # JOB KEDUA: RILIS OTOMATIS KE GITHUB
   sign_and_upload:
     runs-on: ubuntu-latest
     needs: build
     permissions:
-      contents: write # Wajib agar Action bisa membuat rilis di repo kamu
+      contents: write # Wajib untuk membuat release otomatis
 
     steps:
       - name: Downloading artifact (arm64)
@@ -194,8 +195,15 @@ jobs:
           draft: false
           prerelease: true
           body: |
-            Ini adalah hasil build otomatis Kiwi Browser (Hanya 64-bit / arm64).
-            Jika kamu ingin APK-nya, silakan unduh file **.apk** di bawah.
+            ## 🥝 Kiwi Browser - Custom Build (arm64)
+            * **Versi ini dikompilasi secara otomatis untuk arsitektur `arm64-v8a`.
+            
+            ### ⚠️ DISCLAIMER PENTING
+            * **Bukan Rilis Resmi:** Ini adalah modifikasi pribadi. Jangan laporkan *bug* ke pengembang resmi Kiwi Browser.
+            * **Risiko Pengguna:** Disediakan "apa adanya". Semua risiko keamanan dan performa ditanggung pengguna.
+            * **Tanpa Sync & Auto-Update:** Sinkronisasi Google tidak berjalan, dan kamu harus mengunduh versi baru secara manual di halaman ini.
+
+            **Silakan unduh file `.apk` di bagian Assets di bawah untuk menginstal.**
           files: |
             ./apk-arm64/*.apk
             ./apk-arm64/*.mapping
