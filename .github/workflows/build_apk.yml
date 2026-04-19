@@ -51,7 +51,6 @@ jobs:
           repository: kiwibrowser/dependencies
           path: ./secondary_disk/.cipd 
 
-      # THE MAGIC FIX: MENIPU CHROMIUM & SINKRONISASI CONFIG
       - name: Setup gclient environment
         run: |
           ln -sf $GITHUB_WORKSPACE/secondary_disk/.cipd $GITHUB_WORKSPACE/../.cipd
@@ -74,30 +73,27 @@ jobs:
           "
           echo "Symlink 'src' dan Config telah beres!"
 
-      # FASE 1: PYTHON 2 SEBAGAI DEFAULT UNTUK SETUP & RUNHOOKS
-      - name: Installing & Configuring Python (Phase 1 - Python 2)
+      # INSTALL PYTHON & DEPENDENCIES (Tanpa mengubah default python dulu agar apt-get tidak rusak)
+      - name: Installing Python packages & OpenJDK
         run: |
           sudo add-apt-repository ppa:deadsnakes/ppa -y
           sudo apt-get update
           sudo apt-get install -y python3.11 python3.11-distutils python3.11-venv python2 openjdk-8-jdk-headless libncurses5 ccache ninja-build
-          
-          # Hapus link lama
           sudo apt-get remove -y python-is-python3
-          
-          # Setup python3 -> python3.11
-          sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
-          
-          # Setup python -> python2 (Untuk script jadul)
-          sudo update-alternatives --install /usr/bin/python python /usr/bin/python2 1
-          
-          echo "Fase 1 - Cek Versi Default:"
-          python --version
 
-      - name: Installing system dependencies
+      - name: Installing system dependencies (Aman untuk apt-get)
         run: |
           sudo bash install-build-deps.sh --no-chromeos-fonts
           python2 build/linux/sysroot_scripts/install-sysroot.py --arch=i386
           python2 build/linux/sysroot_scripts/install-sysroot.py --arch=amd64
+
+      # MENGUBAH DEFAULT PYTHON SETELAH APT-GET SELESAI
+      - name: Configuring Python (Phase 1 - Python 2 for Runhooks)
+        run: |
+          sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
+          sudo update-alternatives --install /usr/bin/python python /usr/bin/python2 1
+          echo "Fase 1 - Cek Versi Default:"
+          python --version
 
       - name: Creating output folder
         run: mkdir -p secondary_disk/out/android_${{ matrix.platform }}
@@ -123,7 +119,6 @@ jobs:
           echo "CC=ccache clang -Qunused-arguments" >> $GITHUB_ENV
           echo "CXX=ccache clang++ -Qunused-arguments" >> $GITHUB_ENV
 
-      # BYPASS RCLONE CACHE
       - name: Creating rclone config
         if: ${{ github.repository_owner == 'kiwibrowser' }}
         run: |
@@ -138,23 +133,27 @@ jobs:
       - name: Fetching number for the latest stable version of Chromium
         run: curl -s "https://omahaproxy.appspot.com/all" | grep -Fi "android,stable" | cut -f3 -d"," | awk '{split($0,a,"."); print "MAJOR=" a[1] "\nMINOR=" a[2] "\nBUILD=" a[3] "\nPATCH=" a[4]}' > chrome/VERSION
 
-      # RUNHOOKS (Aman menggunakan Python 2)
+      # RUNHOOKS
       - name: Running gclient runhooks
         run: gclient runhooks
 
       # FASE 2: GANTI PYTHON 3.11 SEBAGAI DEFAULT UNTUK KOMPILASI
       - name: Switch Python to version 3.11 for Ninja Compilation
         run: |
-          # Timpa default python kembali ke python 3.11
           sudo update-alternatives --install /usr/bin/python python /usr/bin/python3.11 2
           sudo update-alternatives --set python /usr/bin/python3.11
           echo "Fase 2 - Cek Versi Default (Harus Python 3):"
           python --version
+          
+          rm -rf $HOME/.vpython-root
+          rm -rf $GITHUB_WORKSPACE/secondary_disk/.cipd/.vpython-root
 
       - name: Generating build files
-        run: gn gen ./secondary_disk/out/android_${{ matrix.platform }}
+        run: |
+          export VPYTHON_BYPASS="manually managed python not supported by chrome operations"
+          gn gen ./secondary_disk/out/android_${{ matrix.platform }}
 
-      # --- TAHAP KOMPILASI (Sekarang akan paham format modern) ---
+      # --- TAHAP KOMPILASI ---
       - name: Compiling source-code (base)
         run: ninja -C ./secondary_disk/out/android_${{ matrix.platform }} base
 
@@ -211,7 +210,6 @@ jobs:
           name: apk-${{ matrix.platform }}
           path: ./secondary_disk/out/android_${{ matrix.platform }}/apks/
 
-  # JOB KEDUA: RILIS OTOMATIS
   sign_and_upload:
     runs-on: ubuntu-latest
     needs: build
