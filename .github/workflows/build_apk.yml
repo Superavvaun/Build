@@ -51,11 +51,19 @@ jobs:
           repository: kiwibrowser/dependencies
           path: ./secondary_disk/.cipd 
 
-      - name: Linking .cipd in the proper path and copying .gclient and .gclient_entries
+      # MEMPERBAIKI MASALAH "CLIENT NOT CONFIGURED" (.gclient config fix)
+      - name: Linking .cipd and fixing .gclient config for custom repo name
         run: |
-          ln -s $GITHUB_WORKSPACE/./secondary_disk/.cipd ..
-          cp ../.cipd/.gclient ..
-          cp ../.cipd/.gclient_entries ..
+          ln -sf $GITHUB_WORKSPACE/secondary_disk/.cipd $GITHUB_WORKSPACE/../.cipd
+          cp $GITHUB_WORKSPACE/../.cipd/.gclient $GITHUB_WORKSPACE/../.gclient
+          cp $GITHUB_WORKSPACE/../.cipd/.gclient_entries $GITHUB_WORKSPACE/../.gclient_entries
+          
+          REPO_NAME=$(basename $GITHUB_WORKSPACE)
+          echo "Mendeteksi nama repositori: $REPO_NAME"
+          
+          # Mengganti 'src' dengan nama repo milikmu (misal Superavvaun/...)
+          sed -i "s/\"name\"[[:space:]]*:[[:space:]]*\"src\"/\"name\"        : \"$REPO_NAME\"/g" $GITHUB_WORKSPACE/../.gclient
+          cat $GITHUB_WORKSPACE/../.gclient
 
       - name: Updating APT repository
         run: sudo apt-get update
@@ -111,7 +119,8 @@ jobs:
         run: curl -s "https://omahaproxy.appspot.com/all" | grep -Fi "android,stable" | cut -f3 -d"," | awk '{split($0,a,"."); print "MAJOR=" a[1] "\nMINOR=" a[2] "\nBUILD=" a[3] "\nPATCH=" a[4]}' > chrome/VERSION
 
       - name: Running gclient runhooks
-        run: gclient runhooks
+        # Tambahkan flag khusus agar depot_tools menggunakan python2 secara paksa jika diminta
+        run: export VPYTHON_BYPASS="manually managed python not supported by chrome operations" && gclient runhooks
 
       - name: Generating build files
         run: gn gen ./secondary_disk/out/android_${{ matrix.platform }}
@@ -196,7 +205,7 @@ jobs:
           prerelease: true
           body: |
             ## 🥝 Kiwi Browser - Custom Build (arm64)
-            * **Versi ini dikompilasi secara otomatis untuk arsitektur `arm64-v8a`.
+            Versi ini dikompilasi secara otomatis untuk arsitektur `arm64-v8a`.
             
             ### ⚠️ DISCLAIMER PENTING
             * **Bukan Rilis Resmi:** Ini adalah modifikasi pribadi. Jangan laporkan *bug* ke pengembang resmi Kiwi Browser.
