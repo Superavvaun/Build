@@ -73,7 +73,6 @@ jobs:
           "
           echo "Symlink 'src' dan Config telah beres!"
 
-      # INSTALL PYTHON SEBELUM SYSTEM DEPENDENCIES (Aman untuk apt-get)
       - name: Installing Python packages & OpenJDK
         run: |
           sudo add-apt-repository ppa:deadsnakes/ppa -y
@@ -87,7 +86,6 @@ jobs:
           python2 build/linux/sysroot_scripts/install-sysroot.py --arch=i386
           python2 build/linux/sysroot_scripts/install-sysroot.py --arch=amd64
 
-      # KONFIGURASI PYTHON FASE 1 UNTUK RUNHOOKS
       - name: Configuring Python (Phase 1 - Python 2 for Runhooks)
         run: |
           sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
@@ -107,14 +105,55 @@ jobs:
       - name: Modifying args.gn (arm64)
         run: sed -i "s#android_default_version_code = \"1\"#android_default_version_code = \"$(date '+%y%m%d')2\"#" secondary_disk/out/android_${{ matrix.platform }}/args.gn
 
-      # MENGUNDUH DEPOT_TOOLS DAN MEMBUAT VPYTHON PALSU
+      # [PERBAIKAN UTAMA] MENGUNDUH DEPOT_TOOLS DAN MEMBUAT FILTER VPYTHON PINTAR
       - name: Downloading depot_tools and patching vpython
         working-directory: ./secondary_disk
         run: |
           git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
-          echo '#!/bin/bash' > depot_tools/vpython
-          echo 'python "$@"' >> depot_tools/vpython
+          
+          # Filter pintar untuk vpython (Python 2)
+          cat << 'EOF' > depot_tools/vpython
+          #!/bin/bash
+          args=()
+          skip=0
+          for arg in "$@"; do
+            if [ $skip -eq 1 ]; then
+              skip=0
+              continue
+            fi
+            if [[ "$arg" == -vpython* ]]; then
+              if [[ "$arg" != *"="* ]]; then
+                skip=1
+              fi
+              continue
+            fi
+            args+=("$arg")
+          done
+          exec python2 "${args[@]}"
+          EOF
           chmod +x depot_tools/vpython
+
+          # Filter pintar untuk vpython3 (Python 3)
+          cat << 'EOF' > depot_tools/vpython3
+          #!/bin/bash
+          args=()
+          skip=0
+          for arg in "$@"; do
+            if [ $skip -eq 1 ]; then
+              skip=0
+              continue
+            fi
+            if [[ "$arg" == -vpython* ]]; then
+              if [[ "$arg" != *"="* ]]; then
+                skip=1
+              fi
+              continue
+            fi
+            args+=("$arg")
+          done
+          exec python3 "${args[@]}"
+          EOF
+          chmod +x depot_tools/vpython3
 
       - name: Adding depot_tools to path
         run: echo "$GITHUB_WORKSPACE/secondary_disk/depot_tools" >> $GITHUB_PATH
