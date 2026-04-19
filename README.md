@@ -1,4 +1,16 @@
-# 🥝 Kiwi Browser - Custom Build (Public Archive)
+# 🥝 Kiwi Browser - Custom Build
+
+| [🇮🇩 Bahasa Indonesia](#bahasa-indonesia) | [🇺🇸 English](#english) |
+|-------------------------------------------|------------------------|
+
+---
+
+## 🇮🇩 Bahasa Indonesia <a name="bahasa-indonesia"></a>
+
+### 🛠️ Informasi Proyek (Arsip Publik)
+Repositori ini adalah hasil modifikasi alur kerja (*workflow*) untuk membangun **Kiwi Browser** secara mandiri...
+
+*# 🥝 Kiwi Browser - Custom Build (Public Archive)
 
 ![build apk](https://img.shields.io/badge/build-optimized-brightgreen)
 ![platform](https://img.shields.io/badge/platform-Android_arm64--v8a-orange)
@@ -48,4 +60,61 @@ Proyek ini tidak akan mungkin ada tanpa kerja keras dari para pengembang berikut
 * **Community Modders:** Terima kasih kepada semua pihak yang terus berbagi ilmu mengenai modifikasi Chromium engine.
 
 ---
-*Dibuat dengan ❤️ untuk komunitas open-source.*
+*Dibuat dengan ❤️ untuk komunitas open-source.**
+
+---
+
+## 🇺🇸 English <a name="english"></a>
+
+### 🛠️ Project Information (Public Archive)
+This repository is a modified workflow to build **Kiwi Browser** independently...
+
+*# ðŸ¥ Kiwi Browser - Custom Build (Public Archive)
+
+Welcome! This repository is the result of modifications and workflow automation to build Kiwi Browser independently using GitHub Actions. This project focuses on build stability for modern 64-bit architecture.
+
+--------------------------------------------------------------------------------
+ðŸ› ï¸ PROJECT INFORMATION (PUBLIC ARCHIVE)
+--------------------------------------------------------------------------------
+This repository is a Public Archive. Please use this repository as a reference or a foundation for your own projects:
+
+* Free to Develop: You are highly encouraged to Fork, modify the UI/UX, add features, or further optimize the code.
+* Open for All: If you succeed in increasing build speeds or fixing bugs in the .yml scripts, feel free to share them via Pull Request.
+* Status: This build is provided "as-is" for educational purposes and hobbyist development.
+
+--------------------------------------------------------------------------------
+ðŸš€ FEATURES OF THIS BUILD
+--------------------------------------------------------------------------------
+* High Performance: Specifically optimized for arm64-v8a Android devices.
+* Smart Automation: Uses custom vpython filters to bypass Google Depot Tools limitations within the GitHub Runner environment.
+* Dual Python Setup: Automatic switching between Python 2 (for setup) and Python 3.11 (for Ninja compilation).
+* Disk Management: Automatic cleanup of unused dependencies to prevent Out of Disk Space errors on GitHub servers.
+
+--------------------------------------------------------------------------------
+ðŸ“¦ HOW TO BUILD IT YOURSELF
+--------------------------------------------------------------------------------
+1. Fork this repository to your GitHub account.
+2. Open the Actions tab at the top of the repository page.
+3. Select the "build apk" workflow in the left sidebar.
+4. Click the Run workflow button.
+5. Once the process is complete (approx. 2-4 hours), you can download the APK from the Releases or Artifacts section.
+
+--------------------------------------------------------------------------------
+âš ï¸ DISCLAIMER
+--------------------------------------------------------------------------------
+* Not an Official Release: This is an independent build, not an official release from Geometry OU.
+* User Risk: All risks regarding performance and data are borne by the user.
+* Sync & API: Google synchronization features may not work due to API Key restrictions on third-party builds.
+
+--------------------------------------------------------------------------------
+ðŸŽ–ï¸ CREDITS & ACKNOWLEDGMENTS
+--------------------------------------------------------------------------------
+This project would not be possible without the hard work of the following developers:
+
+* Kiwi Browser Team (Geometry OU) [https://github.com/kiwibrowser/src.next]: The lead developers who brought Chrome extensions to mobile devices.
+* The Chromium Project [https://www.chromium.org/]: The core foundation of almost every modern browser in the world.
+* GitHub Actions: For providing incredible build infrastructure.
+* Community Modders: Thanks to everyone who continues to share knowledge regarding Chromium engine modification.
+
+--------------------------------------------------------------------------------
+Created with â¤ï¸ for the open-source community.*
