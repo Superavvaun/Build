@@ -1,4 +1,4 @@
-# Build APKs for Kiwi Browser (Fork Optimized - 64bit Only - Mega Fix)
+# Build APKs for Kiwi Browser (Fork Optimized - 64bit Only - The Last Fix)
 name: build apk
 
 on:
@@ -80,14 +80,14 @@ jobs:
           sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
           sudo update-alternatives --install /usr/bin/python python /usr/bin/python2 1
 
-      # [PERBAIKAN KRUSIAL] MEMBUAT SEMUA VARIAN VPYTHON
-      - name: Downloading depot_tools and patching ALL vpython variants
+      # [PERBAIKAN TOTAL VPYTHON]
+      - name: Downloading depot_tools and Hard-patching vpython to /usr/bin
         working-directory: ./secondary_disk
         run: |
           git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
           
-          # Script filter universal
-          cat << 'EOF' > depot_tools/vpython_filter
+          # Buat script filter di lokasi sementara
+          cat << 'EOF' > /tmp/vpython_stub
           #!/bin/bash
           args=()
           skip=0
@@ -99,25 +99,23 @@ jobs:
             fi
             args+=("$arg")
           done
-          # Jika script dipanggil sebagai vpython3, gunakan python3.11, jika tidak gunakan python2
           if [[ "$0" == *"vpython3"* ]]; then
-            exec python3.11 "${args[@]}"
+            exec /usr/bin/python3.11 "${args[@]}"
           else
-            exec python2 "${args[@]}"
+            exec /usr/bin/python2 "${args[@]}"
           fi
           EOF
           
-          chmod +x depot_tools/vpython_filter
-          # Membuat semua alias yang mungkin dicari oleh Chromium
-          ln -sf vpython_filter depot_tools/vpython
-          ln -sf vpython_filter depot_tools/vpython3
-          ln -sf vpython_filter depot_tools/vpython-native
+          chmod +x /tmp/vpython_stub
+          # Pasang langsung ke /usr/bin agar sistem tidak bisa berkelit
+          sudo cp /tmp/vpython_stub /usr/bin/vpython
+          sudo cp /tmp/vpython_stub /usr/bin/vpython3
+          # Copy juga ke depot_tools untuk jaga-jaga
+          cp /tmp/vpython_stub depot_tools/vpython
+          cp /tmp/vpython_stub depot_tools/vpython3
 
       - name: Adding depot_tools to path
         run: echo "$GITHUB_WORKSPACE/secondary_disk/depot_tools" >> $GITHUB_PATH
-
-      - name: Fetching Chromium version
-        run: curl -s "https://omahaproxy.appspot.com/all" | grep -Fi "android,stable" | cut -f3 -d"," | awk '{split($0,a,"."); print "MAJOR=" a[1] "\nMINOR=" a[2] "\nBUILD=" a[3] "\nPATCH=" a[4]}' > chrome/VERSION
 
       - name: Bypass missing Traffic Annotation tools
         run: rm -f $GITHUB_WORKSPACE/../src/tools/traffic_annotation/bin/linux64/*.sha1 || true
